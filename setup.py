@@ -43,7 +43,7 @@ setup(
     zip_safe=False,
     license='LGPL',
     install_requires=[
-        'score.js',
+        'score.init',
     ],
     entry_points={
         'score.cli': [

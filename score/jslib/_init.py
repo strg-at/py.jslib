@@ -40,10 +40,11 @@ import time
 
 defaults = {
     'cachedir': '__auto__',
+    'rootdir': 'js/lib',
 }
 
 
-def init(confdict, js):
+def init(confdict, js=None):
     """
     Initializes this module acoording to the :ref:`SCORE module initialization
     guidelines <module_initialization>` with the following configuration keys:
@@ -55,15 +56,36 @@ def init(confdict, js):
         pass
     elif conf['cachedir'] != 'None':
         cachedir = conf['cachedir']
-    return ConfiguredScoreJslibModule(js, cachedir)
+    if js:
+        def traverse():
+            prefix = conf['rootdir'] + '/'
+            virtuals = js.virtfiles.paths()
+            for path in js.paths():
+                if path in virtuals:
+                    continue
+                if not path.startswith(prefix):
+                    continue
+                yield path[len(prefix):]
+        rootdir = js.rootdir
+    else:
+        def traverse():
+            for (path, dirnames, filenames) in os.walk(rootdir):
+                for file in filenames:
+                    if file.endswith('.js'):
+                        yield os.path.join(path, file)
+        rootdir = '.'
+    if conf['rootdir']:
+        rootdir = os.path.join(rootdir, conf['rootdir'])
+    return ConfiguredScoreJslibModule(rootdir, traverse, cachedir)
 
 
 class ConfiguredScoreJslibModule(ConfiguredModule):
 
-    def __init__(self, js, cachedir):
+    def __init__(self, rootdir, traverse, cachedir):
         import score.jslib
         super().__init__(score.jslib)
-        self.js = js
+        self.rootdir = rootdir
+        self.traverse = traverse
         self.cachedir = cachedir
 
     def list(self):
@@ -72,11 +94,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def __iter__(self):
         regex = re.compile(
             r'^//\s+(?P<name>[^@]+)@(?P<version>[^\s]+)\s+(?P<define>.*)$')
-        virtuals = self.js.virtfiles.paths()
-        for path in self.js.paths():
-            if path in virtuals:
-                continue
-            file = os.path.join(self.js.rootdir, path)
+        for path in self.traverse():
+            file = os.path.join(self.rootdir, path)
             firstline = open(file).readline()
             match = regex.match(firstline)
             if match:
@@ -94,7 +113,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         tarball = TarFile.open(fileobj=BytesIO(
             urllib.request.urlopen(tarball_url).read()))
         main = self._find_main(meta, tarball)
-        filepath = os.path.join(self.js.rootdir, path)
+        filepath = os.path.join(self.rootdir, path)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         file = open(filepath, 'w')
         file.write('// %s@%s %s\n' % (library, meta['version'], define))
@@ -134,7 +153,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         if not path:
             file = tarball.extractfile(os.path.join('package', 'bower.json'))
             bower_meta = json.loads(str(file.read(), 'UTF-8'))
-            path = bower_meta.get('browser')
+            path = bower_meta.get('main')
             if not path:
                 path = bower_meta['browser']
         path = os.path.normpath(path)
@@ -163,6 +182,10 @@ class Library:
             self._newest_version = self._conf.get_package_json(self)['version']
         return self._newest_version
 
+    @property
+    def realpath(self):
+        return os.path.join(self._conf.rootdir, self.path)
+
 
 class Parser(slimit.parser.Parser):
 
@@ -182,6 +205,7 @@ class DefineAdjuster(ASTVisitor):
 
     def replace_content(self):
         parser = Parser()
+        open('/tmp/test.js', 'w').write(self.content)
         tree = parser.parse(self.content)
         self.visit(tree)
         if self.start is None:

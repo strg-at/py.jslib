@@ -25,6 +25,7 @@
 # Licensee has his registered seat, an establishment or assets.
 
 import click
+import os
 
 
 @click.group()
@@ -36,17 +37,20 @@ def main():
 
 @main.command()
 @click.option('-d', '--define')
+@click.option('-n', '--no-define', is_flag=True)
 @click.argument('library')
 @click.argument('path', required=False)
 @click.pass_context
-def install(clickctx, library, path=None, define=None):
+def install(clickctx, library, path=None, no_define=False, define=None):
     """
     Install a library.
     """
     jslib = clickctx.obj['conf'].load('jslib')
     if not path:
-        path = 'lib/%s.js' % library
-    if not define:
+        path = '%s.js' % library
+    if no_define:
+        define = None
+    elif not define:
         define = 'lib/%s' % library
     jslib.install(library, path, define)
 
@@ -68,7 +72,7 @@ def list(clickctx, outdated_only, paths, defines):
         if defines:
             output += ' (%s)' % lib.define
         if paths:
-            output += ' in %s' % lib.path
+            output += ' in %s' % os.path.relpath(lib.realpath)
         if outdated_only:
             output += ' -> %s' % lib.newest_version
         print(output)
