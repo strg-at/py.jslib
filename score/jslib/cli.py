@@ -46,12 +46,18 @@ def install(clickctx, library, path=None, no_define=False, define=None):
     Install a library.
     """
     jslib = clickctx.obj['conf'].load('jslib')
-    if not path:
-        path = '%s.js' % library
     if no_define:
         define = None
     elif not define:
         define = 'lib/%s' % library
+    if library in ('require', 'requirejs', 'require.js'):
+        library = 'requirejs-browser'
+        if not path:
+            path = 'require.js'
+    elif not path:
+        path = '%s.js' % library
+    if library == 'requirejs-browser':
+        define = None
     jslib.install(library, path, define)
 
 

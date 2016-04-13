@@ -40,7 +40,7 @@ import time
 
 defaults = {
     'cachedir': '__auto__',
-    'rootdir': 'js/lib',
+    'rootdir': 'lib',
 }
 
 
