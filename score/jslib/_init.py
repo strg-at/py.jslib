@@ -24,15 +24,12 @@
 # the discretion of STRG.AT GmbH also the competent court, in whose district the
 # Licensee has his registered seat, an establishment or assets.
 
-from score.init import ConfiguredModule
+from score.init import ConfiguredModule, ConfigurationError
 import urllib.request
 import json
 import os
 from tarfile import TarFile
 from io import BytesIO
-import slimit.parser
-import slimit.ast
-from slimit.visitors.nodevisitor import ASTVisitor
 import re
 import tempfile
 import time
@@ -40,7 +37,7 @@ import time
 
 defaults = {
     'cachedir': '__auto__',
-    'rootdir': 'lib',
+    'rootdir': None,
 }
 
 
@@ -58,15 +55,20 @@ def init(confdict, js=None):
         cachedir = conf['cachedir']
     if js:
         def traverse():
-            prefix = conf['rootdir'] + '/'
             virtuals = js.virtfiles.paths()
-            for path in js.paths():
-                if path in virtuals:
-                    continue
-                if not path.startswith(prefix):
-                    continue
-                yield path[len(prefix):]
+            yield from (path
+                        for path in js.paths()
+                        if path not in virtuals and path.startswith(prefix))
+        prefix = ''
         rootdir = js.rootdir
+        if conf['rootdir']:
+            if not os.path.abspath(conf['rootdir']).startswith(rootdir):
+                import score.jslib
+                raise ConfigurationError(
+                    score.jslib,
+                    'Configured `rootdir` outside of score.js root')
+            prefix = conf['rootdir'] + '/'
+            rootdir = os.path.join(rootdir, conf['rootdir'])
     else:
         def traverse():
             for (path, dirnames, filenames) in os.walk(rootdir):
@@ -74,26 +76,76 @@ def init(confdict, js=None):
                     if file.endswith('.js'):
                         yield os.path.join(path, file)
         rootdir = '.'
-    if conf['rootdir']:
-        rootdir = os.path.join(rootdir, conf['rootdir'])
-    return ConfiguredScoreJslibModule(rootdir, traverse, cachedir)
+        if conf['rootdir']:
+            if os.path.isabs(conf['rootdir']):
+                rootdir = conf['rootdir']
+            else:
+                rootdir = os.path.join(rootdir, conf['rootdir'])
+    return ConfiguredScoreJslibModule(js, rootdir, traverse, cachedir)
 
 
 class ConfiguredScoreJslibModule(ConfiguredModule):
 
-    def __init__(self, rootdir, traverse, cachedir):
+    def __init__(self, js, rootdir, traverse, cachedir):
         import score.jslib
         super().__init__(score.jslib)
+        self.js = js
         self.rootdir = rootdir
         self.traverse = traverse
         self.cachedir = cachedir
+        if js:
+            self._register_virtjs()
+
+    def _finalize(self, tpl=None):
+        if tpl and 'html' in tpl.renderer.formats:
+            tpl.renderer.add_function(
+                'html', 'jslib', self._tags, escape_output=False)
+
+    def _tags(self, ctx):
+        return self.js._tags(ctx, '!require.js')
+
+    def _register_virtjs(self):
+        file = os.path.join(os.path.dirname(__file__), 'require.js')
+
+        # TODO: enable hasher
+        # def requirejs_hasher(ctx):
+        #     # this is the version of requirejs we're using
+        #     return '2.2.0'
+
+        @self.js.virtjs('!require.js')  # , requirejs_hasher)
+        def requirejs(ctx):
+            return open(file).read() + self.generate_requirejs_config(ctx)
+
+    def generate_require_map(self):
+        libs = dict((lib.name, lib) for lib in self)
+        result = {}
+        for lib in libs.values():
+            libdeps = {}
+            if 'dependencies' not in lib.package_json:
+                continue
+            for dep in lib.package_json['dependencies']:
+                if dep in libs:
+                    libdeps[dep] = libs[dep].define
+            if libdeps:
+                result[lib.define] = libdeps
+        return result
+
+    def generate_requirejs_config(self, ctx):
+        conf = {
+            'map': self.generate_require_map(),
+            # TODO: this should be the base path of self.js, if there is one
+            'baseUrl': '/js/',
+        }
+        if not conf['map']:
+            del conf['map']
+        return 'require.config(%s);\n' % json.dumps(conf)
 
     def list(self):
         return list(self)
 
     def __iter__(self):
         regex = re.compile(
-            r'^//\s+(?P<name>[^@]+)@(?P<version>[^\s]+)\s+(?P<define>.*)$')
+            r'^//\s+(?P<name>[^@]+)@(?P<version>[^\s]+)$')
         for path in self.traverse():
             file = os.path.join(self.rootdir, path)
             firstline = open(file).readline()
@@ -103,11 +155,10 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                     self,
                     match.group('name'),
                     path,
-                    match.group('define'),
                     match.group('version'),
                 )
 
-    def install(self, library, path, define):
+    def install(self, library, path):
         meta = self.get_package_json(library)
         tarball_url = meta['dist']['tarball']
         tarball = TarFile.open(fileobj=BytesIO(
@@ -116,10 +167,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         filepath = os.path.join(self.rootdir, path)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         file = open(filepath, 'w')
-        file.write('// %s@%s %s\n' % (library, meta['version'], define))
+        file.write('// %s@%s\n' % (library, meta['version']))
         content = str(main.read(), 'UTF-8')
-        if define:
-            content = DefineAdjuster(define, content).replace_content()
         file.write(content)
 
     def get(self, name):
@@ -168,71 +217,30 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
 
 class Library:
 
-    def __init__(self, conf, name, path, define, version):
+    def __init__(self, conf, name, path, version):
         self._conf = conf
         self.name = name
         self.path = path
-        self.define = define
         self.version = version
-        self._newest_version = None
+        self._package_json = None
+
+    @property
+    def define(self):
+        return self.path[:-3]
 
     @property
     def newest_version(self):
-        if not self._newest_version:
-            self._newest_version = self._conf.get_package_json(self)['version']
-        return self._newest_version
+        return self.package_json['version']
 
     @property
-    def realpath(self):
+    def package_json(self):
+        if not self._package_json:
+            self._package_json = self._conf.get_package_json(self)
+        return self._package_json
+
+    @property
+    def file(self):
         return os.path.join(self._conf.rootdir, self.path)
-
-
-class Parser(slimit.parser.Parser):
-
-    def p_identifier(self, p):
-        """identifier : ID"""
-        slimit.parser.Parser.p_identifier(self, p)
-        p[0].lexpos = p.slice[1].lexpos
-
-
-class DefineAdjuster(ASTVisitor):
-
-    def __init__(self, name, content):
-        self.name = name
-        self.content = content
-        self.start = None
-        self.replace = None
-
-    def replace_content(self):
-        parser = Parser()
-        open('/tmp/test.js', 'w').write(self.content)
-        tree = parser.parse(self.content)
-        self.visit(tree)
-        if self.start is None:
-            raise Exception('Could not find call to define()')
-        lexer = slimit.lexer.Lexer()
-        lexer.input(self.content)
-        for token in lexer:
-            if token.lexpos <= self.start:
-                continue
-            if not self.replace:
-                if token.value != '(':
-                    continue
-                return self.content[:token.lexpos + 1] + \
-                    ('"%s",' % self.name) + \
-                    self.content[token.lexpos + 1:]
-            if token.type == 'STRING' or token.type == 'ID':
-                return self.content[:token.lexpos] + \
-                    ('"%s",' % self.name) + \
-                    self.content[token.lexpos + len(token.value) + 1:]
-        return self.content
-
-    def visit_FunctionCall(self, node):
-        if getattr(node.identifier, 'value', None) == 'define':
-            self.start = node.identifier.lexpos
-            if len(node.args) == 3:
-                self.replace = node.args[0]
-        self.generic_visit(node)
 
 
 class NotInstalled(Exception):

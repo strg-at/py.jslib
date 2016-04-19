@@ -36,29 +36,17 @@ def main():
 
 
 @main.command()
-@click.option('-d', '--define')
-@click.option('-n', '--no-define', is_flag=True)
 @click.argument('library')
 @click.argument('path', required=False)
 @click.pass_context
-def install(clickctx, library, path=None, no_define=False, define=None):
+def install(clickctx, library, path=None):
     """
     Install a library.
     """
     jslib = clickctx.obj['conf'].load('jslib')
-    if no_define:
-        define = None
-    elif not define:
-        define = 'lib/%s' % library
-    if library in ('require', 'requirejs', 'require.js'):
-        library = 'requirejs-browser'
-        if not path:
-            path = 'require.js'
-    elif not path:
+    if not path:
         path = '%s.js' % library
-    if library == 'requirejs-browser':
-        define = None
-    jslib.install(library, path, define)
+    jslib.install(library, path)
 
 
 @main.command()
@@ -78,7 +66,7 @@ def list(clickctx, outdated_only, paths, defines):
         if defines:
             output += ' (%s)' % lib.define
         if paths:
-            output += ' in %s' % os.path.relpath(lib.realpath)
+            output += ' in %s' % os.path.relpath(lib.file)
         if outdated_only:
             output += ' -> %s' % lib.newest_version
         print(output)
