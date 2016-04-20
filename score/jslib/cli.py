@@ -35,6 +35,17 @@ def main():
     """
 
 
+def output_missing_dependencies(jslib):
+    missing = jslib.missing_dependencies()
+    if not missing:
+        return
+    click.echo(
+        'The following packages have unsatisfied dependencies:', err=True)
+    for lib, dep, version in missing:
+        click.echo(' - %s-%s requires %s%s' % (
+            lib.name, lib.version, dep, version), err=True)
+
+
 @main.command()
 @click.argument('library')
 @click.argument('define', required=False)
@@ -44,7 +55,9 @@ def install(clickctx, library, define=None):
     Install a library.
     """
     jslib = clickctx.obj['conf'].load('jslib')
-    jslib.install(library, define)
+    lib = jslib.install(library, define)
+    click.echo('Successfully installed %s-%s' % (lib.name, lib.version))
+    output_missing_dependencies(jslib)
 
 
 @main.command()
@@ -67,7 +80,8 @@ def list(clickctx, outdated_only, paths, defines):
             output += ' in %s' % os.path.relpath(lib.file)
         if outdated_only:
             output += ' -> %s' % lib.newest_version
-        print(output)
+        click.echo(output)
+    output_missing_dependencies(jslib)
 
 
 @main.command()
@@ -82,6 +96,7 @@ def upgrade(clickctx, library):
     if lib.version == lib.newest_version:
         return
     jslib.install(lib.name, lib.path, define=lib.define)
+    output_missing_dependencies(jslib)
 
 
 @main.command()
@@ -93,7 +108,8 @@ def bundle(clickctx, minify):
     """
     score = clickctx.obj['conf'].load()
     with score.ctx.Context() as ctx:
-        print(score.jslib.make_bundle(ctx, minify=minify))
+        click.echo(score.jslib.make_bundle(ctx, minify=minify))
+    output_missing_dependencies(score.jslib)
 
 
 @main.command('dump-requirejs')
@@ -103,7 +119,8 @@ def dump_require(clickctx):
     Create a bundle with all files
     """
     jslib = clickctx.obj['conf'].load('jslib')
-    print(jslib.render_requirejs())
+    click.echo(jslib.render_requirejs())
+    output_missing_dependencies(jslib)
 
 
 @main.command('dump-requirejs-config')
@@ -114,4 +131,5 @@ def dump_require_config(clickctx):
     """
     score = clickctx.obj['conf'].load()
     with score.ctx.Context() as ctx:
-        print(score.jslib.render_requirejs_config(ctx))
+        click.echo(score.jslib.render_requirejs_config(ctx))
+    output_missing_dependencies(score.jslib)

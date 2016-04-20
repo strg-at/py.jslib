@@ -142,6 +142,18 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             del conf['map']
         return 'require.config(%s);\n' % json.dumps(conf)
 
+    def missing_dependencies(self):
+        missing = []
+        libs = dict((lib.name, lib) for lib in self)
+        for lib in libs.values():
+            if 'dependencies' not in lib.package_json:
+                continue
+            dependencies = lib.package_json['dependencies']
+            for dep in dependencies:
+                if dep not in libs:
+                    missing.append((lib, dep, dependencies[dep]))
+        return missing
+
     def _render_require_map(self):
         libs = dict((lib.name, lib) for lib in self)
         result = {}
@@ -245,6 +257,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         file.write('// %s@%s\n' % (library, meta['version']))
         content = str(main.read(), 'UTF-8')
         file.write(content)
+        return Library(self, library, define, meta['version'])
 
     def get(self, name):
         if isinstance(name, Library):
