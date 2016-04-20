@@ -199,7 +199,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 filepath = os.path.join(self.rootdir, path)
                 contents.append(open(filepath).read())
             names.append(re.sub(r'\.js(\..+)?$', '', path))
-        file = os.path.join(os.path.dirname(__file__), 'compress.js')
+        file = os.path.join(os.path.dirname(__file__), 'rewrite.js')
         script = open(file).read() % (
             json.dumps({'files': files, 'names': names,
                         'contents': contents, 'minify': minify}))
