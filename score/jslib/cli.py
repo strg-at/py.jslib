@@ -87,11 +87,12 @@ def upgrade(clickctx, library):
 
 
 @main.command()
+@click.option('-m', '--minify', is_flag=True)
 @click.pass_context
-def bundle(clickctx):
+def bundle(clickctx, minify):
     """
     Create a bundle with all files
     """
     score = clickctx.obj['conf'].load()
     with score.ctx.Context() as ctx:
-        print(score.jslib.make_bundle(ctx))
+        print(score.jslib.make_bundle(ctx, minify=minify))

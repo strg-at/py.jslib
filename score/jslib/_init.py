@@ -34,6 +34,7 @@ import re
 import tempfile
 import time
 import subprocess
+import hashlib
 
 
 defaults = {
@@ -79,6 +80,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         self.cachedir = cachedir
         if js:
             self._register_requirejs_virtjs()
+            self._register_almond_virtjs()
             self._register_bundle_virtjs()
 
     def traverse(self):
@@ -105,24 +107,42 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 'html', 'jslib', self._tags, escape_output=False)
 
     def _tags(self, ctx):
-        return self.js._tags(ctx, '!require.js')
+        if self.js.combine:
+            return self.js._tags(ctx, '_require_bundle.js')
+        else:
+            return self.js._tags(ctx, '!require.js')
 
     def _register_requirejs_virtjs(self):
-        file = os.path.join(os.path.dirname(__file__), 'require.js')
-
-        # TODO: enable hasher
-        # def requirejs_hasher(ctx):
-        #     # this is the version of requirejs we're using
-        #     return '2.2.0'
-
-        @self.js.virtjs('!require.js')  # , requirejs_hasher)
+        @self.js.virtjs('!require.js')
         def requirejs(ctx):
-            return open(file).read() + self.generate_requirejs_config(ctx)
+            return (self.render_requirejs() +
+                    self.render_requirejs_config(ctx))
 
-    def _register_bundle_virtjs(self):
-        pass
+    def _register_almond_virtjs(self):
+        @self.js.virtjs('_almond.js')
+        def requirejs(ctx):
+            return (self.render_almondjs() +
+                    self.render_requirejs_config(ctx))
 
-    def generate_require_map(self):
+    def render_requirejs(self):
+        file = os.path.join(os.path.dirname(__file__), 'require.js')
+        return open(file).read()
+
+    def render_almondjs(self):
+        file = os.path.join(os.path.dirname(__file__), 'almond.js')
+        return open(file).read()
+
+    def render_requirejs_config(self, ctx):
+        conf = {
+            'map': self._render_require_map(),
+            # TODO: this should be the base path of self.js, if there is one
+            'baseUrl': '/js/',
+        }
+        if not conf['map']:
+            del conf['map']
+        return 'require.config(%s);\n' % json.dumps(conf)
+
+    def _render_require_map(self):
         libs = dict((lib.name, lib) for lib in self)
         result = {}
         for lib in libs.values():
@@ -136,15 +156,15 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 result[lib.define] = libdeps
         return result
 
-    def generate_requirejs_config(self, ctx):
-        conf = {
-            'map': self.generate_require_map(),
-            # TODO: this should be the base path of self.js, if there is one
-            'baseUrl': '/js/',
-        }
-        if not conf['map']:
-            del conf['map']
-        return 'require.config(%s);\n' % json.dumps(conf)
+    def _register_bundle_virtjs(self):
+
+        def bundle_hash(ctx):
+            hashes = map(lambda h: h(), self.js.generate_combined_hasher(ctx))
+            return hashlib.sha256(''.join(hashes).encode('UTF-8')).hexdigest()
+
+        @self.js.virtjs('_require_bundle.js', bundle_hash)
+        def requirejs_bundle(ctx):
+            return self.make_bundle(ctx, minify=self.js.minify)
 
     def list(self):
         return list(self)
@@ -167,10 +187,10 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                     match.group('version'),
                 )
 
-    def make_bundle(self, ctx):
-        files = []
-        names = []
-        contents = []
+    def make_bundle(self, ctx, minify=True):
+        files = ['_almond.js']
+        names = [None]
+        contents = [self.render_requirejs()]
         for path in self.traverse():
             files.append(path)
             if self.js:
@@ -181,7 +201,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             names.append(re.sub(r'\.js(\..+)?$', '', path))
         file = os.path.join(os.path.dirname(__file__), 'compress.js')
         script = open(file).read() % (
-            json.dumps({'files': files, 'names': names, 'contents': contents}))
+            json.dumps({'files': files, 'names': names,
+                        'contents': contents, 'minify': minify}))
         process = subprocess.Popen(['node'],
                                    stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE,
@@ -205,7 +226,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             if line.startswith('WARN: '):
                 line = line[6:]
             self.log.info(line)
-        return stdout
+        return (stdout + self.render_requirejs_config(ctx))
 
     def install(self, library, path):
         meta = self.get_package_json(library)
