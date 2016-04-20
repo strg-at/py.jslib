@@ -33,6 +33,7 @@ from io import BytesIO
 import re
 import tempfile
 import time
+import subprocess
 
 
 defaults = {
@@ -53,13 +54,8 @@ def init(confdict, js=None):
         pass
     elif conf['cachedir'] != 'None':
         cachedir = conf['cachedir']
+    rootdir = None
     if js:
-        def traverse():
-            virtuals = js.virtfiles.paths()
-            yield from (path
-                        for path in js.paths()
-                        if path not in virtuals and path.startswith(prefix))
-        prefix = ''
         rootdir = js.rootdir
         if conf['rootdir']:
             if not os.path.abspath(conf['rootdir']).startswith(rootdir):
@@ -67,34 +63,41 @@ def init(confdict, js=None):
                 raise ConfigurationError(
                     score.jslib,
                     'Configured `rootdir` outside of score.js root')
-            prefix = conf['rootdir'] + '/'
-            rootdir = os.path.join(rootdir, conf['rootdir'])
-    else:
-        def traverse():
-            for (path, dirnames, filenames) in os.walk(rootdir):
-                for file in filenames:
-                    if file.endswith('.js'):
-                        yield os.path.join(path, file)
-        rootdir = '.'
-        if conf['rootdir']:
-            if os.path.isabs(conf['rootdir']):
-                rootdir = conf['rootdir']
-            else:
-                rootdir = os.path.join(rootdir, conf['rootdir'])
-    return ConfiguredScoreJslibModule(js, rootdir, traverse, cachedir)
+            rootdir = os.path.join(js.rootdir, conf['rootdir'])
+    elif conf['rootdir']:
+        rootdir = conf['rootdir']
+    return ConfiguredScoreJslibModule(js, rootdir, cachedir)
 
 
 class ConfiguredScoreJslibModule(ConfiguredModule):
 
-    def __init__(self, js, rootdir, traverse, cachedir):
+    def __init__(self, js, rootdir, cachedir):
         import score.jslib
         super().__init__(score.jslib)
         self.js = js
         self.rootdir = rootdir
-        self.traverse = traverse
         self.cachedir = cachedir
         if js:
-            self._register_virtjs()
+            self._register_requirejs_virtjs()
+            self._register_bundle_virtjs()
+
+    def traverse(self):
+        if self.js:
+            if self.rootdir != self.js.rootdir:
+                prefix = os.path.relpath(self.rootdir, self.js.rootdir) + '/'
+                yield from (path
+                            for path in self.js.paths()
+                            if path != '!require.js' and
+                            path.startswith(prefix))
+            else:
+                yield from (path
+                            for path in self.js.paths()
+                            if path != '!require.js')
+        else:
+            for (path, dirnames, filenames) in os.walk(self.rootdir):
+                for file in filenames:
+                    if file.endswith('.js'):
+                        yield os.path.join(path, file)
 
     def _finalize(self, tpl=None):
         if tpl and 'html' in tpl.renderer.formats:
@@ -104,7 +107,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def _tags(self, ctx):
         return self.js._tags(ctx, '!require.js')
 
-    def _register_virtjs(self):
+    def _register_requirejs_virtjs(self):
         file = os.path.join(os.path.dirname(__file__), 'require.js')
 
         # TODO: enable hasher
@@ -115,6 +118,9 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         @self.js.virtjs('!require.js')  # , requirejs_hasher)
         def requirejs(ctx):
             return open(file).read() + self.generate_requirejs_config(ctx)
+
+    def _register_bundle_virtjs(self):
+        pass
 
     def generate_require_map(self):
         libs = dict((lib.name, lib) for lib in self)
@@ -148,7 +154,10 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             r'^//\s+(?P<name>[^@]+)@(?P<version>[^\s]+)$')
         for path in self.traverse():
             file = os.path.join(self.rootdir, path)
-            firstline = open(file).readline()
+            try:
+                firstline = open(file).readline()
+            except FileNotFoundError:
+                continue
             match = regex.match(firstline)
             if match:
                 yield Library(
@@ -157,6 +166,46 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                     path,
                     match.group('version'),
                 )
+
+    def make_bundle(self, ctx):
+        files = []
+        names = []
+        contents = []
+        for path in self.traverse():
+            files.append(path)
+            if self.js:
+                contents.append(self.js.tpl.renderer.render_file(ctx, path))
+            else:
+                filepath = os.path.join(self.rootdir, path)
+                contents.append(open(filepath).read())
+            names.append(re.sub(r'\.js(\..+)?$', '', path))
+        file = os.path.join(os.path.dirname(__file__), 'compress.js')
+        script = open(file).read() % (
+            json.dumps({'files': files, 'names': names, 'contents': contents}))
+        process = subprocess.Popen(['node'],
+                                   stdin=subprocess.PIPE,
+                                   stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate(script.encode('UTF-8'))
+        stdout, stderr = str(stdout, 'UTF-8'), str(stderr, 'UTF-8')
+        if process.returncode:
+            self.log.error(stderr)
+            try:
+                raise subprocess.CalledProcessError(
+                    process.returncode, 'node', output=stdout, stderr=stderr)
+            except TypeError:
+                # the stderr kwarg is only available in python 3.5
+                pass
+            raise subprocess.CalledProcessError(
+                process.returncode, 'node', output=stderr)
+        for line in stderr.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith('WARN: '):
+                line = line[6:]
+            self.log.info(line)
+        return stdout
 
     def install(self, library, path):
         meta = self.get_package_json(library)

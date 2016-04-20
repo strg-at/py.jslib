@@ -84,3 +84,14 @@ def upgrade(clickctx, library):
     if lib.version == lib.newest_version:
         return
     jslib.install(lib.name, lib.path, define=lib.define)
+
+
+@main.command()
+@click.pass_context
+def bundle(clickctx):
+    """
+    Create a bundle with all files
+    """
+    score = clickctx.obj['conf'].load()
+    with score.ctx.Context() as ctx:
+        print(score.jslib.make_bundle(ctx))
