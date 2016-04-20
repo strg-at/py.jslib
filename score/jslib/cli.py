@@ -96,3 +96,24 @@ def bundle(clickctx, minify):
     score = clickctx.obj['conf'].load()
     with score.ctx.Context() as ctx:
         print(score.jslib.make_bundle(ctx, minify=minify))
+
+
+@main.command('dump-requirejs')
+@click.pass_context
+def dump_require(clickctx):
+    """
+    Create a bundle with all files
+    """
+    jslib = clickctx.obj['conf'].load('jslib')
+    print(jslib.render_requirejs())
+
+
+@main.command('dump-requirejs-config')
+@click.pass_context
+def dump_require_config(clickctx):
+    """
+    Create a bundle with all files
+    """
+    score = clickctx.obj['conf'].load()
+    with score.ctx.Context() as ctx:
+        print(score.jslib.render_requirejs_config(ctx))
