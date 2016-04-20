@@ -252,17 +252,18 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 return library
         raise NotInstalled(library)
 
-    def get_package_json(self, name):
+    def get_package_json(self, name, version='latest'):
         if isinstance(name, Library):
             name = name.name
         localdir = os.path.join(tempfile.gettempdir(), 'score', 'jslib')
-        local = os.path.join(localdir, '%s.meta.json' % name)
+        local = os.path.join(localdir, '%s-%s.meta.json' % (name, version))
         try:
-            if time.time() - os.path.getmtime(local) < 300:
+            mtime = os.path.getmtime(local)
+            if version != 'latest' or time.time() - mtime < 3600:
                 return json.loads(open(local).read())
         except FileNotFoundError:
             pass
-        meta_url = "http://registry.npmjs.org/%s/latest" % name
+        meta_url = "http://registry.npmjs.org/%s/%s" % (name, version)
         content = str(urllib.request.urlopen(meta_url).read(), 'UTF-8')
         os.makedirs(localdir, exist_ok=True)
         open(local, 'w').write(content)
@@ -303,12 +304,13 @@ class Library:
 
     @property
     def newest_version(self):
-        return self.package_json['version']
+        return self._conf.get_package_json(self.name)['version']
 
     @property
     def package_json(self):
         if not self._package_json:
-            self._package_json = self._conf.get_package_json(self)
+            self._package_json = self._conf.get_package_json(
+                self.name, self.version)
         return self._package_json
 
     @property
