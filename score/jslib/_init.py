@@ -150,7 +150,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             if 'dependencies' not in lib.package_json:
                 continue
             for dep in lib.package_json['dependencies']:
-                if dep in libs:
+                if dep in libs and dep != libs[dep].define:
                     libdeps[dep] = libs[dep].define
             if libdeps:
                 result[lib.define] = libdeps
@@ -231,13 +231,15 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             self.log.info(line)
         return (stdout + self.render_requirejs_config(ctx))
 
-    def install(self, library, path):
+    def install(self, library, define=None):
+        if not define:
+            define = library
         meta = self.get_package_json(library)
         tarball_url = meta['dist']['tarball']
         tarball = TarFile.open(fileobj=BytesIO(
             urllib.request.urlopen(tarball_url).read()))
         main = self._find_main(meta, tarball)
-        filepath = os.path.join(self.rootdir, path)
+        filepath = os.path.join(self.rootdir, '%s.js' % define)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         file = open(filepath, 'w')
         file.write('// %s@%s\n' % (library, meta['version']))

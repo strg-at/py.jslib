@@ -37,16 +37,14 @@ def main():
 
 @main.command()
 @click.argument('library')
-@click.argument('path', required=False)
+@click.argument('define', required=False)
 @click.pass_context
-def install(clickctx, library, path=None):
+def install(clickctx, library, define=None):
     """
     Install a library.
     """
     jslib = clickctx.obj['conf'].load('jslib')
-    if not path:
-        path = '%s.js' % library
-    jslib.install(library, path)
+    jslib.install(library, define)
 
 
 @main.command()
