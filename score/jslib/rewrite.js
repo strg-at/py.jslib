@@ -13,7 +13,7 @@ var define_adjuster = new UglifyJS.TreeWalker(function(node, descend) {
                 this.start = node.args[0].start.pos;
                 this.end = null;
             }
-        } else {
+        } else if (this.replaceExisting) {
             if (conf.minify) {
                 node.args[0].value = this.name;
                 node.args[0].quote = "'";
@@ -30,11 +30,12 @@ var define_adjuster = new UglifyJS.TreeWalker(function(node, descend) {
     }
 });
 
-define_adjuster.reset = function(name) {
+define_adjuster.reset = function(name, replaceExisting) {
     this.encountered_define = false;
     this.start = null;
     this.end = null;
     this.name = name;
+    this.replaceExisting = replaceExisting;
 };
 
 var conf = %s;
@@ -44,7 +45,7 @@ if (conf.minify) {
     var toplevel = null;
     for (var i = 0; i < conf.files.length; i++) {
         var ast = UglifyJS.parse(conf.contents[i], {'filename': conf.files[i]});
-        define_adjuster.reset(conf.names[i]);
+        define_adjuster.reset(conf.names[i], conf.replaceExisting[i]);
         ast.figure_out_scope();
         ast.walk(define_adjuster);
         if (!toplevel) {
@@ -72,9 +73,9 @@ if (conf.minify) {
         console.log('//' + Array(conf.files[i].length + 5).join("-") + '//\n');
         var ast = UglifyJS.parse(conf.contents[i], {'filename': conf.files[i]});
         ast.figure_out_scope();
-        define_adjuster.reset(conf.names[i]);
+        define_adjuster.reset(conf.names[i], conf.replaceExisting[i]);
         ast.walk(define_adjuster);
-        if (!define_adjuster.encountered_define) {
+        if (define_adjuster.start === null) {
             console.log(conf.contents[i]);
         } else if (define_adjuster.end === null) {
             console.log(conf.contents[i].slice(0, define_adjuster.start) +

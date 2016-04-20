@@ -191,6 +191,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         files = ['_almond.js']
         names = [None]
         contents = [self.render_requirejs()]
+        replaceExisting = [False]
         for path in self.traverse():
             files.append(path)
             if self.js:
@@ -199,10 +200,12 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 filepath = os.path.join(self.rootdir, path)
                 contents.append(open(filepath).read())
             names.append(re.sub(r'\.js(\..+)?$', '', path))
+            replaceExisting.append(False)
         file = os.path.join(os.path.dirname(__file__), 'rewrite.js')
         script = open(file).read() % (
             json.dumps({'files': files, 'names': names,
-                        'contents': contents, 'minify': minify}))
+                        'contents': contents, 'minify': minify,
+                        'replaceExisting': replaceExisting}))
         process = subprocess.Popen(['node'],
                                    stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE,
