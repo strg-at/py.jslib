@@ -40,6 +40,12 @@ setup(
     url='http://score-framework.org',
     keywords='score framework javascript npm',
     packages=['score', 'score.jslib'],
+    package_dir={
+        'score.jslib': 'score/jslib',
+    },
+    package_data={
+        'score.jslib': ['almond.js', 'require.js', 'rewrite.js'],
+    },
     zip_safe=False,
     license='LGPL',
     classifiers=[
