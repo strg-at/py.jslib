@@ -78,10 +78,19 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         self.js = js
         self.rootdir = rootdir
         self.cachedir = cachedir
+        self.virtlibs = []
         if js:
             self._register_requirejs_virtjs()
             self._register_almond_virtjs()
             self._register_bundle_virtjs()
+
+    def virtlib(self, define, version, dependencies):
+        def wrap(func):
+            self.virtlibs.append(VirtualLibrary(
+                self, define, define + '.js', version, dependencies))
+            self.js.virtjs(define + '.js')(func)
+            return func
+        return wrap
 
     def traverse(self):
         if self.js:
@@ -151,9 +160,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         missing = []
         libs = dict((lib.name, lib) for lib in self)
         for lib in libs.values():
-            if 'dependencies' not in lib.package_json:
-                continue
-            dependencies = lib.package_json['dependencies']
+            dependencies = lib.dependencies
             for dep in dependencies:
                 if dep not in libs:
                     missing.append((lib, dep, dependencies[dep]))
@@ -164,9 +171,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         result = {}
         for lib in libs.values():
             libdeps = {}
-            if 'dependencies' not in lib.package_json:
-                continue
-            for dep in lib.package_json['dependencies']:
+            for dep in lib.dependencies:
                 if dep in libs and dep != libs[dep].define:
                     libdeps[dep] = libs[dep].define
             if libdeps:
@@ -203,6 +208,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                     path,
                     match.group('version'),
                 )
+        yield from self.virtlibs
 
     def make_bundle(self, ctx, minify=True):
         files = ['_almond.js']
@@ -323,6 +329,12 @@ class Library:
         return self.path[:-3]
 
     @property
+    def dependencies(self):
+        if 'dependencies' not in self.package_json:
+            return []
+        return self.package_json['dependencies']
+
+    @property
     def newest_version(self):
         return self._conf.get_package_json(self.name)['version']
 
@@ -336,6 +348,29 @@ class Library:
     @property
     def file(self):
         return os.path.join(self._conf.rootdir, self.path)
+
+
+class VirtualLibrary(Library):
+
+    def __init__(self, conf, name, path, version, dependencies):
+        super().__init__(conf, name, path, version)
+        self._dependencies = dependencies
+
+    @property
+    def dependencies(self):
+        return self._dependencies
+
+    @property
+    def newest_version(self):
+        return self.version
+
+    @property
+    def package_json(self):
+        return {}
+
+    @property
+    def file(self):
+        return None
 
 
 class NotInstalled(Exception):

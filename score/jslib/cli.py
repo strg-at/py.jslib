@@ -77,7 +77,10 @@ def list(clickctx, outdated_only, paths, defines):
         if defines:
             output += ' (%s)' % lib.define
         if paths:
-            output += ' in %s' % os.path.relpath(lib.file)
+            if lib.file:
+                output += ' in %s' % os.path.relpath(lib.file)
+            else:
+                output += ' <virtual>'
         if outdated_only:
             output += ' -> %s' % lib.newest_version
         click.echo(output)
