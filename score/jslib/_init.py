@@ -67,6 +67,10 @@ def init(confdict, js=None):
             rootdir = os.path.join(js.rootdir, conf['rootdir'])
     else:
         if conf['rootdir']:
+            if not os.path.isdir(conf['rootdir']):
+                import score.jslib
+                raise ConfigurationError(
+                    score.jslib, 'Configured `rootdir` does not exit')
             rootdir = conf['rootdir']
         else:
             import score.jslib
