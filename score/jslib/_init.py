@@ -117,7 +117,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             for (path, dirnames, filenames) in os.walk(self.rootdir):
                 for file in filenames:
                     if file.endswith('.js'):
-                        yield os.path.join(path, file)
+                        yield os.path.relpath(os.path.join(path, file),
+                                              self.rootdir)
 
     def _finalize(self, tpl=None):
         if tpl and 'html' in tpl.renderer.formats:
