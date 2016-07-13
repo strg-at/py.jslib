@@ -65,8 +65,13 @@ def init(confdict, js=None):
                     score.jslib,
                     'Configured `rootdir` outside of score.js root')
             rootdir = os.path.join(js.rootdir, conf['rootdir'])
-    elif conf['rootdir']:
-        rootdir = conf['rootdir']
+    else:
+        if conf['rootdir']:
+            rootdir = conf['rootdir']
+        else:
+            import score.jslib
+            raise ConfigurationError(
+                score.jslib, 'No `rootdir` configured')
     return ConfiguredScoreJslibModule(js, rootdir, cachedir)
 
 
