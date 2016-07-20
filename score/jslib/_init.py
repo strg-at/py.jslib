@@ -38,7 +38,7 @@ import hashlib
 
 
 defaults = {
-    'cachedir': '__auto__',
+    'cachedir': None,
     'rootdir': None,
 }
 
@@ -50,11 +50,16 @@ def init(confdict, js=None):
     """
     conf = defaults.copy()
     conf.update(confdict)
-    cachedir = None
-    if conf['cachedir'] == '__auto__':
-        pass
-    elif conf['cachedir'] != 'None':
+    if conf['cachedir']:
         cachedir = conf['cachedir']
+        if not os.path.isdir(cachedir):
+            import score.jslib
+            raise ConfigurationError(
+                score.jslib,
+                'Configured `cachedir` does not exist')
+    else:
+        cachedir = os.path.join(tempfile.gettempdir(), 'score', 'jslib')
+        os.makedirs(cachedir, exist_ok=True)
     rootdir = None
     if js:
         rootdir = js.rootdir
@@ -291,8 +296,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def get_package_json(self, name, version='latest'):
         if isinstance(name, Library):
             name = name.name
-        localdir = os.path.join(tempfile.gettempdir(), 'score', 'jslib')
-        local = os.path.join(localdir, '%s-%s.meta.json' % (name, version))
+        local = os.path.join(self.cachedir, '%s-%s.meta.json' % (name, version))
         try:
             mtime = os.path.getmtime(local)
             if version != 'latest' or time.time() - mtime < 3600:
@@ -301,7 +305,6 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             pass
         meta_url = "http://registry.npmjs.org/%s/%s" % (name, version)
         content = str(urllib.request.urlopen(meta_url).read(), 'UTF-8')
-        os.makedirs(localdir, exist_ok=True)
         open(local, 'w').write(content)
         return json.loads(content)
 
