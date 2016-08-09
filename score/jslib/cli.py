@@ -98,7 +98,7 @@ def upgrade(clickctx, library):
     lib = jslib.get(library)
     if lib.version == lib.newest_version:
         return
-    jslib.install(lib.name, lib.path, define=lib.define)
+    jslib.install(lib.name, lib.define)
     output_missing_dependencies(jslib)
 
 
