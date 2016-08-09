@@ -33,7 +33,7 @@ with open(os.path.join(here, 'README.rst')) as f:
 
 setup(
     name='score.jslib',
-    version='0.0.7',
+    version='0.0.8',
     long_description=README,
     author='strg.at',
     author_email='score@strg.at',
