@@ -134,12 +134,17 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         if self.js.combine:
             return self.js._tags(ctx, '_require_bundle.js')
         else:
-            tags = list(self.js.virtfiles.paths())
-            tags.remove('!require.js')
-            tags.remove('_almond.js')
-            tags.remove('_require_bundle.js')
-            tags.insert(0, '!require.js')
-            return self.js._tags(ctx, *tags)
+            paths = list(self.js.virtfiles.paths())
+            paths.remove('!require.js')
+            paths.remove('_almond.js')
+            paths.remove('_require_bundle.js')
+            paths.insert(0, '!require.js')
+            for virtlib in self.virtlibs:
+                try:
+                    paths.remove(virtlib.define + '.js')
+                except ValueError:
+                    pass
+            return self.js._tags(ctx, *paths)
 
     def _register_requirejs_virtjs(self):
         @self.js.virtjs('!require.js')
