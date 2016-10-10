@@ -40,6 +40,7 @@ import hashlib
 defaults = {
     'cachedir': None,
     'rootdir': None,
+    'urlbase': '/js/',
 }
 
 
@@ -81,18 +82,19 @@ def init(confdict, js=None):
             import score.jslib
             raise ConfigurationError(
                 score.jslib, 'No `rootdir` configured')
-    return ConfiguredScoreJslibModule(js, rootdir, cachedir)
+    return ConfiguredScoreJslibModule(js, rootdir, cachedir, conf['urlbase'])
 
 
 class ConfiguredScoreJslibModule(ConfiguredModule):
 
-    def __init__(self, js, rootdir, cachedir):
+    def __init__(self, js, rootdir, cachedir, urlbase):
         import score.jslib
         super().__init__(score.jslib)
         self.js = js
         self.rootdir = rootdir
         self.cachedir = cachedir
         self.virtlibs = []
+        self.urlbase = urlbase
         if js:
             self._register_requirejs_virtjs()
             self._register_almond_virtjs()
@@ -169,8 +171,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def render_requirejs_config(self, ctx):
         conf = {
             'map': self._render_require_map(),
-            # TODO: this should be the base path of self.js, if there is one
-            'baseUrl': '/js/',
+            'baseUrl': self.urlbase,
         }
         if not conf['map']:
             del conf['map']
