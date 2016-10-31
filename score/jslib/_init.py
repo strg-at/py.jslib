@@ -382,6 +382,7 @@ class Library:
             dependencies.update(self.package_json['dependencies'])
         if 'peerDependencies' in self.package_json:
             dependencies.update(self.package_json['peerDependencies'])
+        dependencies.pop('requirejs', None)
         return dependencies
 
     @property
