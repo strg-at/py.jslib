@@ -25,6 +25,7 @@
 # Licensee has his registered seat, an establishment or assets.
 
 import click
+import json
 import os
 
 
@@ -126,11 +127,16 @@ def dump_require(clickctx):
 
 
 @main.command('dump-requirejs-config')
+@click.option('-p', '--pretty', is_flag=True)
 @click.pass_context
-def dump_require_config(clickctx):
+def dump_require_config(clickctx, pretty):
     """
     Create a bundle with all files
     """
     score = clickctx.obj['conf'].load()
-    click.echo(score.jslib.render_requirejs_config())
+    if pretty:
+        click.echo('require.config(%s);\n' % json.dumps(
+            score.jslib.requirejs_config, indent=4))
+    else:
+        click.echo(score.jslib.render_requirejs_config())
     output_missing_dependencies(score.jslib)
