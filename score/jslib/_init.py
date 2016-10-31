@@ -349,9 +349,12 @@ class Library:
 
     @property
     def dependencies(self):
-        if 'dependencies' not in self.package_json:
-            return []
-        return self.package_json['dependencies']
+        dependencies = {}
+        if 'dependencies' in self.package_json:
+            dependencies.update(self.package_json['dependencies'])
+        if 'peerDependencies' in self.package_json:
+            dependencies.update(self.package_json['peerDependencies'])
+        return dependencies
 
     @property
     def newest_version(self):
