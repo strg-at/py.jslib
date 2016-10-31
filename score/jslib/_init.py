@@ -24,7 +24,8 @@
 # the discretion of STRG.AT GmbH also the competent court, in whose district the
 # Licensee has his registered seat, an establishment or assets.
 
-from score.init import ConfiguredModule, ConfigurationError
+from score.init import ConfiguredModule, ConfigurationError, parse_json
+import collections
 import urllib.request
 import json
 import os
@@ -40,8 +41,19 @@ import hashlib
 defaults = {
     'cachedir': None,
     'rootdir': None,
-    'urlbase': '/js/',
+    'config': {
+        'baseUrl': '/js/',
+    },
 }
+
+
+def _merge_conf(dst, src):
+    for k, v in src.items():
+        if isinstance(v, dict):
+            dst[k] = collections.OrderedDict()
+            _merge_conf(dst[k], v)
+        else:
+            dst[k] = v
 
 
 def init(confdict, js=None):
@@ -82,19 +94,24 @@ def init(confdict, js=None):
             import score.jslib
             raise ConfigurationError(
                 score.jslib, 'No `rootdir` configured')
-    return ConfiguredScoreJslibModule(js, rootdir, cachedir, conf['urlbase'])
+    overrides = defaults['config'].copy()
+    if 'config' in conf and conf['config'] is not defaults['config']:
+        _merge_conf(overrides, parse_json(conf['config']))
+    elif 'urlbase' in conf:
+        conf['baseUrl'] = conf['urlbase']
+    return ConfiguredScoreJslibModule(js, rootdir, cachedir, overrides)
 
 
 class ConfiguredScoreJslibModule(ConfiguredModule):
 
-    def __init__(self, js, rootdir, cachedir, urlbase):
+    def __init__(self, js, rootdir, cachedir, config_overrides):
         import score.jslib
         super().__init__(score.jslib)
         self.js = js
         self.rootdir = rootdir
         self.cachedir = cachedir
         self.virtlibs = []
-        self.urlbase = urlbase
+        self.config_overrides = config_overrides
         if js:
             self._register_requirejs_virtjs()
             self._register_almond_virtjs()
@@ -171,10 +188,10 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def render_requirejs_config(self, ctx):
         conf = {
             'map': self._render_require_map(),
-            'baseUrl': self.urlbase,
         }
         if not conf['map']:
             del conf['map']
+        _merge_conf(conf, self.config_overrides)
         return 'require.config(%s);\n' % json.dumps(conf)
 
     def missing_dependencies(self):
