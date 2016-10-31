@@ -110,8 +110,7 @@ def bundle(clickctx, minify):
     Create a bundle with all files
     """
     score = clickctx.obj['conf'].load()
-    with score.ctx.Context() as ctx:
-        click.echo(score.jslib.make_bundle(ctx, minify=minify))
+    click.echo(score.jslib.make_bundle(minify=minify))
     output_missing_dependencies(score.jslib)
 
 
@@ -133,6 +132,5 @@ def dump_require_config(clickctx):
     Create a bundle with all files
     """
     score = clickctx.obj['conf'].load()
-    with score.ctx.Context() as ctx:
-        click.echo(score.jslib.render_requirejs_config(ctx))
+    click.echo(score.jslib.render_requirejs_config())
     output_missing_dependencies(score.jslib)

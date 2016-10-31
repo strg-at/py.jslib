@@ -50,7 +50,10 @@ defaults = {
 def _merge_conf(dst, src):
     for k, v in src.items():
         if isinstance(v, dict):
-            dst[k] = collections.OrderedDict()
+            if k not in dst:
+                dst[k] = collections.OrderedDict()
+            elif not isinstance(dst[k], dict):
+                dst[k] = collections.OrderedDict(dst[k])
             _merge_conf(dst[k], v)
         else:
             dst[k] = v
@@ -112,6 +115,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         self.cachedir = cachedir
         self.virtlibs = []
         self.config_overrides = config_overrides
+        self.__requirejs_config = None
         if js:
             self._register_requirejs_virtjs()
             self._register_almond_virtjs()
@@ -169,13 +173,13 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         @self.js.virtjs('!require.js')
         def requirejs(ctx):
             return (self.render_requirejs() +
-                    self.render_requirejs_config(ctx))
+                    self.render_requirejs_config())
 
     def _register_almond_virtjs(self):
         @self.js.virtjs('_almond.js')
         def requirejs(ctx):
             return (self.render_almondjs() +
-                    self.render_requirejs_config(ctx))
+                    self.render_requirejs_config())
 
     def render_requirejs(self):
         file = os.path.join(os.path.dirname(__file__), 'require.js')
@@ -185,14 +189,21 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         file = os.path.join(os.path.dirname(__file__), 'almond.js')
         return open(file).read()
 
-    def render_requirejs_config(self, ctx):
-        conf = {
-            'map': self._render_require_map(),
-        }
-        if not conf['map']:
-            del conf['map']
-        _merge_conf(conf, self.config_overrides)
+    def render_requirejs_config(self):
+        conf = self.requirejs_config
         return 'require.config(%s);\n' % json.dumps(conf)
+
+    @property
+    def requirejs_config(self):
+        if self.__requirejs_config is None:
+            conf = {
+                'map': self._render_require_map(),
+            }
+            if not conf['map']:
+                del conf['map']
+            _merge_conf(conf, self.config_overrides)
+            self.__requirejs_config = conf
+        return self.__requirejs_config
 
     def missing_dependencies(self):
         missing = []
@@ -206,7 +217,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
 
     def _render_require_map(self):
         libs = dict((lib.name, lib) for lib in self)
-        result = {}
+        result = collections.OrderedDict()
         for lib in libs.values():
             libdeps = {}
             for dep in lib.dependencies:
@@ -248,7 +259,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 )
         yield from self.virtlibs
 
-    def make_bundle(self, ctx, minify=True):
+    def make_bundle(self, ctx=None, *, minify=True):
         files = ['_almond.js']
         names = [None]
         contents = [self.render_requirejs()]
@@ -290,7 +301,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             if line.startswith('WARN: '):
                 line = line[6:]
             self.log.info(line)
-        return (stdout + self.render_requirejs_config(ctx))
+        return (stdout + self.render_requirejs_config())
 
     def install(self, library, define=None):
         if not define:
