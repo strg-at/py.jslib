@@ -206,13 +206,17 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         return self.__requirejs_config
 
     def missing_dependencies(self):
+        conf = self.requirejs_config
         missing = []
         libs = dict((lib.name, lib) for lib in self)
         for lib in libs.values():
             dependencies = lib.dependencies
             for dep in dependencies:
                 if dep not in libs:
-                    missing.append((lib, dep, dependencies[dep]))
+                    try:
+                        conf['map'][lib.name][dep]
+                    except KeyError:
+                        missing.append((lib, dep, dependencies[dep]))
         return missing
 
     def _render_require_map(self):
