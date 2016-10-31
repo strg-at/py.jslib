@@ -317,13 +317,13 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def _find_main(self, meta, tarball):
         path = meta.get('browser')
         if not path:
-            path = meta.get('main')
-        if not path:
             file = tarball.extractfile(os.path.join('package', 'bower.json'))
             bower_meta = json.loads(str(file.read(), 'UTF-8'))
-            path = bower_meta.get('main')
+            path = bower_meta['browser']
             if not path:
-                path = bower_meta['browser']
+                path = bower_meta.get('main')
+        if not path:
+            path = meta.get('main')
         path = os.path.normpath(path)
         if path.endswith('.min.js') or path.endswith('-min.js'):
             test = path[:-7] + '.js'
