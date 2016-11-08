@@ -57,6 +57,7 @@ def _merge_conf(dst, src):
             _merge_conf(dst[k], v)
         else:
             dst[k] = v
+    return dst
 
 
 def init(confdict, js=None):
@@ -264,24 +265,35 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         yield from self.virtlibs
 
     def make_bundle(self, ctx=None, *, minify=True):
-        files = ['_almond.js']
-        names = [None]
-        contents = [self.render_requirejs()]
-        replaceExisting = [False]
+        files = collections.OrderedDict(_almond=self.render_almondjs())
         for path in self.traverse():
-            files.append(path)
+            name = re.sub(r'\.js(\..+)?$', '', path)
             if self.js:
-                contents.append(self.js.tpl.renderer.render_file(ctx, path))
+                content = self.js.tpl.renderer.render_file(ctx, path)
             else:
                 filepath = os.path.join(self.rootdir, path)
-                contents.append(open(filepath).read())
-            names.append(re.sub(r'\.js(\..+)?$', '', path))
-            replaceExisting.append(False)
-        file = os.path.join(os.path.dirname(__file__), 'rewrite.js')
-        script = open(file).read() % (
-            json.dumps({'files': files, 'names': names,
-                        'contents': contents, 'minify': minify,
-                        'replaceExisting': replaceExisting}))
+                content = open(filepath).read()
+            header = \
+                '//---{sep}----//\n' \
+                '//  {name}.js  //\n' \
+                '//---{sep}----//\n' \
+                .format(name=name, sep=('-' * len(name)))
+            files[name] = header + '\n' + content
+        conf = _merge_conf({
+            "rawText": files,
+            "out": "stdout",
+            "optimize": "uglify" if minify else "none",
+            "include": list(sorted(files.keys())),
+        }, self.requirejs_config)
+        conf["baseUrl"] = self.rootdir
+        script = r'''
+            require("requirejs").optimize(%s, function (result) {
+                console.warn(result);
+            }, function(err) {
+                console.warn(err);
+                process.exit(1);
+            });
+        ''' % json.dumps(conf)
         process = subprocess.Popen(['node'],
                                    stdin=subprocess.PIPE,
                                    stdout=subprocess.PIPE,
@@ -298,13 +310,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 pass
             raise subprocess.CalledProcessError(
                 process.returncode, 'node', output=stderr)
-        for line in stderr.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith('WARN: '):
-                line = line[6:]
-            self.log.info(line)
+        if stderr:
+            self.log.info("r.js output:\n" + stderr)
         return (stdout + self.render_requirejs_config())
 
     def install(self, library, define=None):
@@ -349,11 +356,16 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def _find_main(self, meta, tarball):
         path = meta.get('browser')
         if not path:
-            file = tarball.extractfile(os.path.join('package', 'bower.json'))
-            bower_meta = json.loads(str(file.read(), 'UTF-8'))
-            path = bower_meta['browser']
-            if not path:
-                path = bower_meta.get('main')
+            try:
+                file = tarball.extractfile(
+                    os.path.join('package', 'bower.json'))
+            except KeyError:
+                pass
+            else:
+                bower_meta = json.loads(str(file.read(), 'UTF-8'))
+                path = bower_meta['browser']
+                if not path:
+                    path = bower_meta.get('main')
         if not path:
             path = meta.get('main')
         path = os.path.normpath(path)
