@@ -41,9 +41,7 @@ import hashlib
 defaults = {
     'cachedir': None,
     'rootdir': None,
-    'config': {
-        'baseUrl': '/js/',
-    },
+    'config': collections.OrderedDict(baseUrl='/js/'),
 }
 
 
@@ -197,9 +195,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     @property
     def requirejs_config(self):
         if self.__requirejs_config is None:
-            conf = {
-                'map': self._render_require_map(),
-            }
+            conf = collections.OrderedDict(map=self._render_require_map())
             if not conf['map']:
                 del conf['map']
             _merge_conf(conf, self.config_overrides)
@@ -209,7 +205,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def missing_dependencies(self):
         conf = self.requirejs_config
         missing = []
-        libs = dict((lib.name, lib) for lib in self)
+        libs = collections.OrderedDict((lib.name, lib) for lib in self)
         for lib in libs.values():
             dependencies = lib.dependencies
             for dep in dependencies:
@@ -221,10 +217,10 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         return missing
 
     def _render_require_map(self):
-        libs = dict((lib.name, lib) for lib in self)
+        libs = collections.OrderedDict((lib.name, lib) for lib in self)
         result = collections.OrderedDict()
         for lib in libs.values():
-            libdeps = {}
+            libdeps = collections.OrderedDict()
             for dep in lib.dependencies:
                 if dep in libs and dep != libs[dep].define:
                     libdeps[dep] = libs[dep].define
@@ -345,13 +341,14 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
         try:
             mtime = os.path.getmtime(local)
             if version != 'latest' or time.time() - mtime < 3600:
-                return json.loads(open(local).read())
+                return json.loads(open(local).read(),
+                                  object_pairs_hook=collections.OrderedDict)
         except FileNotFoundError:
             pass
         meta_url = "http://registry.npmjs.org/%s/%s" % (name, version)
         content = str(urllib.request.urlopen(meta_url).read(), 'UTF-8')
         open(local, 'w').write(content)
-        return json.loads(content)
+        return json.loads(content, object_pairs_hook=collections.OrderedDict)
 
     def _find_main(self, meta, tarball):
         path = meta.get('browser')
@@ -362,7 +359,9 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             except KeyError:
                 pass
             else:
-                bower_meta = json.loads(str(file.read(), 'UTF-8'))
+                bower_meta = json.loads(
+                    str(file.read(), 'UTF-8'),
+                    object_pairs_hook=collections.OrderedDict)
                 path = bower_meta['browser']
                 if not path:
                     path = bower_meta.get('main')
@@ -393,7 +392,7 @@ class Library:
 
     @property
     def dependencies(self):
-        dependencies = {}
+        dependencies = collections.OrderedDict()
         if 'dependencies' in self.package_json:
             dependencies.update(self.package_json['dependencies'])
         if 'peerDependencies' in self.package_json:
