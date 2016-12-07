@@ -362,7 +362,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 bower_meta = json.loads(
                     str(file.read(), 'UTF-8'),
                     object_pairs_hook=collections.OrderedDict)
-                path = bower_meta['browser']
+                path = bower_meta.get('browser')
                 if not path:
                     path = bower_meta.get('main')
         if not path:
