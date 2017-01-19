@@ -100,7 +100,7 @@ def init(confdict, js=None):
     if 'config' in conf and conf['config'] is not defaults['config']:
         _merge_conf(overrides, parse_json(conf['config']))
     elif 'urlbase' in conf:
-        conf['baseUrl'] = conf['urlbase']
+        overrides['baseUrl'] = conf['urlbase']
     return ConfiguredScoreJslibModule(js, rootdir, cachedir, overrides)
 
 
