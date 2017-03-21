@@ -128,24 +128,37 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
             return func
         return wrap
 
-    def traverse(self):
+    def traverse(self, *, include_hidden=False):
         if self.js:
             if self.rootdir != self.js.rootdir:
                 prefix = os.path.relpath(self.rootdir, self.js.rootdir) + '/'
                 yield from (path
-                            for path in self.js.paths()
+                            for path in self.js.paths(include_hidden)
                             if path != '!require.js' and
                             path.startswith(prefix))
             else:
                 yield from (path
-                            for path in self.js.paths()
+                            for path in self.js.paths(include_hidden)
                             if path != '!require.js')
         else:
             for (path, dirnames, filenames) in os.walk(self.rootdir):
                 for file in filenames:
-                    if file.endswith('.js'):
+                    if not file.endswith('.js'):
+                        continue
+                    if not include_hidden:
                         yield os.path.relpath(os.path.join(path, file),
                                               self.rootdir)
+                        continue
+                    i = 0
+                    while i < len(dirnames):
+                        if dirnames[i][0] == '_':
+                            del dirnames[i]
+                        else:
+                            i += 1
+                    if file[0] == '_':
+                        continue
+                    yield os.path.relpath(os.path.join(path, file),
+                                          self.rootdir)
 
     def _finalize(self, tpl=None):
         if tpl and 'html' in tpl.renderer.formats:
@@ -244,7 +257,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
     def __iter__(self):
         regex = re.compile(
             r'^//\s+(?P<name>[^@]+)@(?P<version>[^\s]+)$')
-        for path in self.traverse():
+        for path in self.traverse(include_hidden=True):
             file = os.path.join(self.rootdir, path)
             try:
                 firstline = open(file).readline()
