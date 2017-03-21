@@ -145,7 +145,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                 for file in filenames:
                     if not file.endswith('.js'):
                         continue
-                    if not include_hidden:
+                    if include_hidden:
                         yield os.path.relpath(os.path.join(path, file),
                                               self.rootdir)
                         continue
