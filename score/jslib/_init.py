@@ -141,7 +141,8 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
                             for path in self.js.paths(include_hidden)
                             if path != '!require.js')
         else:
-            for (path, dirnames, filenames) in os.walk(self.rootdir):
+            for path, dirnames, filenames in os.walk(self.rootdir,
+                                                     followlinks=True):
                 for file in filenames:
                     if not file.endswith('.js'):
                         continue
