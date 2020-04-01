@@ -1,3 +1,2 @@
 include score/jslib/almond.js
 include score/jslib/require.js
-include score/jslib/rewrite.js
