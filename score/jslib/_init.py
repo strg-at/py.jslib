@@ -204,7 +204,7 @@ class ConfiguredScoreJslibModule(ConfiguredModule):
 
     def render_requirejs_config(self):
         conf = self.requirejs_config
-        return 'require.config(%s);\n' % json.dumps(conf)
+        return 'window.requireAlmond = window.hasOwnProperty(\'requireAlmond\') ? window.requireAlmond : window.require; requireAlmond.config(%s);\n' % json.dumps(conf)
 
     @property
     def requirejs_config(self):
