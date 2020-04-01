@@ -44,7 +44,7 @@ setup(
         'score.jslib': 'score/jslib',
     },
     package_data={
-        'score.jslib': ['almond.js', 'require.js', 'rewrite.js'],
+        'score.jslib': ['almond.js', 'require.js'],
     },
     zip_safe=False,
     license='LGPL',
